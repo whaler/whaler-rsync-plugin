@@ -1,0 +1,12 @@
+{
+  "name": "whaler-rsync-plugin",
+  "version": "0.1.0",
+  "description": "Whaler rsync plugin",
+  "author": "Sergei Vizel",
+  "license": "MIT",
+  "main": "index.js",
+  "whaler-plugin": true,
+  "dependencies": {
+    "q": "^1.4.1"
+  }
+}
