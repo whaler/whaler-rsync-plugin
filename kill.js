@@ -7,7 +7,9 @@ var addCmd = function(whaler) {
 
     whaler.cli.command(
         'rsync-kill <container>'
-    ).description(
+    ).argumentsHelp({
+        'container': 'Rsync container name'
+    }).description(
         'Kill rsync daemon'
     ).action(function(container, options) {
 
@@ -22,10 +24,6 @@ var addCmd = function(whaler) {
                 }
             });
 
-        }).on('--help', function() {
-            whaler.cli.argumentsHelp(this, {
-                'container': 'Rsync container name'
-            });
         });
 };
 

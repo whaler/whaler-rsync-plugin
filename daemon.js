@@ -15,7 +15,10 @@ var addCmd = function(whaler) {
 
     whaler.cli.command(
         'rsync-daemon <ref> [volume]'
-    ).description(
+    ).argumentsHelp({
+        'ref': 'Application or container name',
+        'volume': 'Volume'
+    }).description(
         'Rsync daemon'
     ).action(function(ref, volume, options) {
 
@@ -36,11 +39,6 @@ var addCmd = function(whaler) {
                 console.log(JSON.stringify(data));
             });
 
-        }).on('--help', function() {
-            whaler.cli.argumentsHelp(this, {
-                'ref': 'Application or container name',
-                'volume': 'Volume'
-            });
         });
 };
 

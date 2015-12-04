@@ -12,7 +12,10 @@ var addCmd = function(whaler) {
         'rsync <source> <destination>'
     ).alias(
         'sync'
-    ).description(
+    ).argumentsHelp({
+        'source': 'Source',
+        'destination': 'Destination'
+    }).description(
         'Syncronize application volumes'
     ).action(function(source, destination, options) {
 
@@ -30,11 +33,6 @@ var addCmd = function(whaler) {
                 }
             });
 
-        }).on('--help', function() {
-            whaler.cli.argumentsHelp(this, {
-                'source': 'Source',
-                'destination': 'Destination'
-            });
         });
 };
 
