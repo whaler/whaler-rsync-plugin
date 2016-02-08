@@ -3,7 +3,7 @@
 ## Install
 
 ```sh
-$ whaler plugins install whaler-rsync-plugin
+$ whaler plugins:install whaler-rsync-plugin
 ```
 
 ## License
