@@ -1,12 +1,32 @@
 {
   "name": "whaler-rsync-plugin",
-  "version": "0.2.0",
   "description": "Whaler rsync plugin",
-  "author": "Sergei Vizel",
+  "author": {
+    "name": "Sergei Vizel",
+    "email": "sergei.vizel@gmail.com",
+    "url": "https://github.com/cravler"
+  },
+  "homepage": "https://github.com/whaler/whaler-rsync-plugin",
+  "keywords": [
+    "whaler",
+    "rsync",
+    "plugin"
+  ],
   "license": "MIT",
+  "version": "0.2.1",
   "main": "index.js",
   "whaler-plugin": true,
   "dependencies": {
     "x-console": "^0.1.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:whaler/whaler-rsync-plugin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/whaler/whaler-rsync-plugin/issues"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
   }
 }
