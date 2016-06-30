@@ -58,11 +58,18 @@ function exports(whaler) {
                     if (fs.existsSync(src + '/.rsyncignore')) {
                         cmd.push('--exclude-from=/volume/.rsyncignore'); // rsync ignore
                     }
-                    cmd.push('/volume/');
+
+                    const stat = yield fs.lstat.$call(null, src);
+                    if (stat.isDirectory()) {
+                        cmd.push('/volume/');
+                    } else {
+                        cmd.push('/volume/' + path.basename(src));
+                    }
+
                     cmd.push(generateRsync(dstConf));
 
                     container = yield rsyncContainer.$call(null, docker, {
-                        src: src,
+                        src: stat.isDirectory() ? src : path.dirname(src),
                         cmd: cmd,
                         env: [
                             'RSYNC_PASSWORD=' + dstConf.password
@@ -76,8 +83,14 @@ function exports(whaler) {
                     if (srcConf.exclude) {
                         cmd = cmd.concat(srcConf.exclude); // rsync ignore
                     }
-                    cmd.push(generateRsync(srcConf));
-                    cmd.push('/volume');
+                    
+                    if (srcConf.file) {
+                        cmd.push(generateRsync(srcConf) + '/' + srcConf.file);
+                        cmd.push('/volume/');
+                    } else {
+                        cmd.push(generateRsync(srcConf));
+                        cmd.push('/volume');
+                    }
 
                     container = yield rsyncContainer.$call(null, docker, {
                         src: dst,
@@ -169,6 +182,12 @@ function parseArgs(value) {
 
             if (!/^\//.test(volume)) {
                 throw new Error('In case of container name is provided, volume is mandatory!');
+            }
+        } else {
+            const parts = host.split(':');
+            if (/^\//.test(parts[parts.length - 1])) {
+                volume = parts.pop();
+                host = parts.join(':');
             }
         }
 

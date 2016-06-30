@@ -2,6 +2,7 @@
 
 var fs = require('fs');
 var util = require('util');
+var path = require('path');
 var crypto = require('crypto');
 
 module.exports = function(whaler) {
@@ -20,30 +21,48 @@ module.exports = function(whaler) {
         const storage = whaler.get('apps');
         const app = yield storage.get.$call(storage, appName);
         let src = app.path;
+        let fileName = null;
 
         if (serviceName) {
-            const volume = options['volume'];
+            let volume = options['volume'];
             if (!volume) {
                 throw new Error('In case of container name is provided, volume is mandatory!');
             }
 
             const container = docker.getContainer(serviceName + '.' + appName);
             const info = yield container.inspect.$call(container);
-            let volumes = null;
-            if (info['Config']['Volumes']) {
-                volumes = Object.keys(info['Config']['Volumes']);
-            }
+            let destination = null;
+            for (let mount of info['Mounts']) {
+                const index = volume.indexOf(mount['Destination']);
+                if (0 === index) {
+                    destination = mount['Destination'];
+                    volume = volume.substr(destination.length);
+                    src = mount['Source'] + volume;
 
-            if (null === volumes || -1 === volumes.indexOf(volume)) {
-                throw new Error('Volume "' + volume + '" no found!');
-            }
-
-            const mounts = info['Mounts'];
-            for (let mount of mounts) {
-                if (volume == mount['Destination']) {
-                    src = mount['Source'];
+                    try {
+                        const stat = yield fs.lstat.$call(null, src);
+                        if (!stat.isDirectory()) {
+                            fileName = path.basename(src);
+                            src = path.dirname(src);
+                        }
+                    } catch (e) {}
                 }
             }
+
+            if (null === destination) {
+                throw new Error('Volume "' + volume + '" rejected!');
+            }
+
+        } else if (options['volume']) {
+            src = path.join(src, options['volume']);
+
+            try {
+                const stat = yield fs.lstat.$call(null, src);
+                if (!stat.isDirectory()) {
+                    fileName = path.basename(src);
+                    src = path.dirname(src);
+                }
+            } catch (e) {}
         }
 
         const credentials = {
@@ -84,7 +103,8 @@ module.exports = function(whaler) {
             username: credentials['username'],
             password: credentials['password'],
             container: info['Name'].substring(1),
-            exclude: yield rsyncExclude.$call(null, src + '/.rsyncignore')
+            exclude: yield rsyncExclude.$call(null, src + '/.rsyncignore'),
+            file: fileName
         };
     });
 };
@@ -110,7 +130,7 @@ function* rsyncExclude(file) {
         exclude = content.split('\n').filter((rule) => {
             return rule.length > 0;
         }).map((rule) => {
-            return util.format('--exclude="%s"', rule);
+            return util.format('--exclude=%s', rule);
         });
     } catch (e) {}
 
