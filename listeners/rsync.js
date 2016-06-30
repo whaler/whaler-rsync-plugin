@@ -309,7 +309,7 @@ function runDaemon(config, callback) {
             argv: [
                 'rsync:daemon',
                 config.ref,
-                config.volume
+                config.volume || ''
             ]
         }));
     });
