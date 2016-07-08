@@ -44,6 +44,8 @@ Sync from remote machine service
 $ whaler rsync <service>.<app>@<domain name or IP>:/var/www ./
 ```
 
+> **NB!** Create a `.rsyncignore` file with a list of all the files and directories you don't want to backup.
+
 ## License
 
 This software is under the MIT license. See the complete license in:
