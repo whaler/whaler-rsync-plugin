@@ -72,7 +72,9 @@ module.exports = function(whaler) {
 
         const rsyncContainer = require('../lib/container');
 
-        const container = yield rsyncContainer.$call(null, docker, {
+        yield rsyncContainer.pullImage.$call(docker);
+
+        const container = yield rsyncContainer.$call(docker, {
             src: src,
             ref: 'rsync-daemon-' + options['ref'],
             env: [

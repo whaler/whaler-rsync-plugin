@@ -3,6 +3,7 @@
 var fs = require('fs');
 var tls = require('tls');
 var path = require('path');
+var console = require('x-console');
 
 module.exports = exports;
 
@@ -17,30 +18,52 @@ function exports(whaler) {
 
         const docker = whaler.get('docker');
 
+        const stage = {
+            container: null,
+            remote: {}
+        };
+
         let err = null;
-        let container = null;
-        const remote = {};
+
+        whaler.before('SIGINT', function* () {
+            yield exit.$call(whaler, options, stage);
+        });
 
         if ('local' === rsyncType(src) && 'local' === rsyncType(dst)) {
             throw new Error('not supported');
         }
 
+        const followPull = options['followPull'] || false;
         const rsyncContainer = require('../lib/container');
+
+        yield rsyncContainer.pullImage.$call(docker, followPull);
+
+        if (followPull) {
+            console.info('');
+            console.info('[%s] Rsync %s -> %s', process.pid, parsePath(options['src']), parsePath(options['dst']));
+        }
 
         try {
             if ('remote' === rsyncType(src) && 'remote' === rsyncType(dst)) {
-                container = yield rsyncContainer.$call(null, docker, {
+                stage.container = yield rsyncContainer.$call(docker, {
                     ref: 'rsync-' + Math.floor(new Date().getTime() / 1000)
                 });
-                const info = yield container.inspect.$call(container);
+                const info = yield stage.container.inspect.$call(stage.container);
 
                 const mounts = info['Mounts'];
                 for (let mount of mounts) {
                     if ('/volume' == mount['Destination']) {
+
+                        console.warn('');
+                        console.warn('[%s] Rsync %s -> %s', process.pid, options['src'], 'tmp@local');
+
                         yield whaler.$emit('rsync', {
                             src: options['src'],
                             dst: mount['Source']
                         });
+
+                        console.warn('');
+                        console.warn('[%s] Rsync %s -> %s', process.pid, 'tmp@local', options['dst']);
 
                         yield whaler.$emit('rsync', {
                             src: mount['Source'],
@@ -52,7 +75,7 @@ function exports(whaler) {
             } else {
 
                 if ('local' === rsyncType(src) && 'remote' === rsyncType(dst)) {
-                    const dstConf = remote['dst'] = yield runDaemon.$call(whaler, dst);
+                    const dstConf = stage.remote['dst'] = yield runDaemon.$call(whaler, options['dst'], dst);
 
                     let cmd = makeCmd();
                     if (fs.existsSync(src + '/.rsyncignore')) {
@@ -68,7 +91,8 @@ function exports(whaler) {
 
                     cmd.push(generateRsync(dstConf));
 
-                    container = yield rsyncContainer.$call(null, docker, {
+                    console.log('');
+                    stage.container = yield rsyncContainer.$call(docker, {
                         src: stat.isDirectory() ? src : path.dirname(src),
                         cmd: cmd,
                         env: [
@@ -77,7 +101,7 @@ function exports(whaler) {
                     });
 
                 } else {
-                    const srcConf = remote['src'] = yield runDaemon.$call(whaler, src);
+                    const srcConf = stage.remote['src'] = yield runDaemon.$call(whaler, options['src'], src);
 
                     let cmd = makeCmd();
                     if (srcConf.exclude) {
@@ -92,7 +116,8 @@ function exports(whaler) {
                         cmd.push('/volume');
                     }
 
-                    container = yield rsyncContainer.$call(null, docker, {
+                    console.log('');
+                    stage.container = yield rsyncContainer.$call(docker, {
                         src: dst,
                         cmd: cmd,
                         env: [
@@ -101,8 +126,8 @@ function exports(whaler) {
                     });
                 }
 
-                yield container.start.$call(container, {});
-                const stream = yield container.logs.$call(container, {
+                yield stage.container.start.$call(stage.container, {});
+                const stream = yield stage.container.logs.$call(stage.container, {
                     follow: true,
                     stdout: true,
                     stderr: true
@@ -115,16 +140,7 @@ function exports(whaler) {
             err = e;
         }
 
-        if (container) {
-            yield container.remove.$call(container, {
-                force: true,
-                v: true
-            });
-        }
-
-        for (let key of Object.keys(remote)) {
-            yield killDaemon.$call(whaler, remote[key]);
-        }
+        yield exit.$call(whaler, options, stage);
 
         if (err) {
             throw err;
@@ -133,6 +149,35 @@ function exports(whaler) {
 }
 
 // PRIVATE
+
+/**
+ * @param options
+ * @param stage
+ */
+function* exit(options, stage) {
+    const whaler = this;
+
+    if (stage.container) {
+        const container = stage.container;
+        stage.container = null;
+
+        try {
+            yield container.remove.$call(container, {
+                force: true,
+                v: true
+            });
+        } catch (e) {}
+    }
+
+    for (let key of Object.keys(stage.remote)) {
+        const config = stage.remote[key];
+        delete stage.remote[key];
+
+        try {
+            yield killDaemon.$call(whaler, options[key], config);
+        } catch (e) {}
+    }
+}
 
 /**
  * @returns {string[]}
@@ -200,8 +245,18 @@ function parseArgs(value) {
         };
     }
 
-    if (!path.isAbsolute(value)) {
-        value = path.join(process.cwd(), path.normalize(value));
+    return parsePath(value);
+}
+
+/**
+ * @param value
+ * @returns {*}
+ */
+function parsePath(value) {
+    if (value.indexOf('@') === -1) {
+        if (!path.isAbsolute(value)) {
+            value = path.join(process.cwd(), path.normalize(value));
+        }
     }
 
     return value;
@@ -268,10 +323,14 @@ function createClient(host) {
 }
 
 /**
+ * @param name
  * @param config
  * @param callback
  */
-function runDaemon(config, callback) {
+function runDaemon(name, config, callback) {
+    console.warn('');
+    console.warn('[%s] Running "%s" rsync daemon', process.pid, name);
+
     const whaler = this;
     const client = createClient(config.host);
 
@@ -331,11 +390,15 @@ function runDaemon(config, callback) {
 }
 
 /**
+ * @param name
  * @param config
  * @param callback
  */
-function killDaemon(config, callback) {
+function killDaemon(name, config, callback) {
     const whaler = this;
+
+    console.warn('');
+    console.warn('[%s] Killing "%s" rsync daemon', process.pid, name);
 
     if (config.remote) {
         const client = createClient(config.remote);

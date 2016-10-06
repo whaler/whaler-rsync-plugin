@@ -1,5 +1,7 @@
 'use strict';
 
+var console = require('x-console');
+
 module.exports = exports;
 
 /**
@@ -15,11 +17,10 @@ function exports(whaler) {
             destination: 'Destination'
         })
         .action(function* (source, destination, options) {
-            process.env.WHALER_DOCKER_PROGRESS = 'quiet';
-
             yield whaler.$emit('rsync', {
                 src: source,
-                dst: destination
+                dst: destination,
+                followPull: true
             });
         });
 

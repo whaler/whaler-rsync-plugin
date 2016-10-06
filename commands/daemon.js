@@ -15,8 +15,6 @@ function exports(whaler) {
             volume: 'Volume'
         })
         .action(function* (ref, volume, options) {
-            process.env.WHALER_DOCKER_PROGRESS = 'quiet';
-
             let data;
             try {
                 data = yield whaler.$emit('rsync:daemon', {
