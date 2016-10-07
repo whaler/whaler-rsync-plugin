@@ -59,7 +59,9 @@ function exports(whaler) {
 
                         yield whaler.$emit('rsync', {
                             src: options['src'],
-                            dst: mount['Source']
+                            dst: mount['Source'],
+                            delete: options.delete || false,
+                            dryRun: options.dryRun || false
                         });
 
                         console.warn('');
@@ -67,7 +69,9 @@ function exports(whaler) {
 
                         yield whaler.$emit('rsync', {
                             src: mount['Source'],
-                            dst: options['dst']
+                            dst: options['dst'],
+                            delete: options.delete || false,
+                            dryRun: options.dryRun || false
                         });
                     }
                 }
@@ -77,7 +81,7 @@ function exports(whaler) {
                 if ('local' === rsyncType(src) && 'remote' === rsyncType(dst)) {
                     const dstConf = stage.remote['dst'] = yield runDaemon.$call(whaler, options['dst'], dst);
 
-                    let cmd = makeCmd();
+                    let cmd = makeCmd(options);
                     if (fs.existsSync(src + '/.rsyncignore')) {
                         cmd.push('--exclude-from=/volume/.rsyncignore'); // rsync ignore
                     }
@@ -103,7 +107,7 @@ function exports(whaler) {
                 } else {
                     const srcConf = stage.remote['src'] = yield runDaemon.$call(whaler, options['src'], src);
 
-                    let cmd = makeCmd();
+                    let cmd = makeCmd(options);
                     if (srcConf.exclude) {
                         cmd = cmd.concat(srcConf.exclude); // rsync ignore
                     }
@@ -180,15 +184,24 @@ function* exit(options, stage) {
 }
 
 /**
+ * @param options
  * @returns {string[]}
  */
-function makeCmd() {
+function makeCmd(options) {
     const cmd = ['rsync'];
 
     cmd.push('-az');              // https://download.samba.org/pub/rsync/rsync.html
     cmd.push('--numeric-ids');    // don't map uid/gid values by user/group name
     cmd.push('--human-readable'); // output numbers in a human-readable format
     cmd.push('--verbose');        // increase verbosity
+
+    if (options.delete || false) {
+        cmd.push('--delete');
+    }
+
+    if (options.dryRun || false) {
+        cmd.push('--dry-run');
+    }
 
     return cmd;
 }

@@ -16,10 +16,14 @@ function exports(whaler) {
             source: 'Source',
             destination: 'Destination'
         })
+        .option('--dry-run', 'Perform a trial run with no changes made')
+        .option('--delete', 'Delete extraneous files from destination dirs')
         .action(function* (source, destination, options) {
             yield whaler.$emit('rsync', {
                 src: source,
                 dst: destination,
+                delete: options.delete || false,
+                dryRun: options.dryRun || false,
                 followPull: true
             });
         });
