@@ -360,7 +360,7 @@ function runDaemon(name, config, callback) {
                 const json = JSON.parse(data.toString());
                 response = json;
             } catch (e) {
-                process.stdout.write(data);
+                //process.stdout.write(data);
             }
         });
         client.write(JSON.stringify({
@@ -409,7 +409,7 @@ function killDaemon(name, config, callback) {
 
         client.on('connect', () => {
             client.on('data', (data) => {
-                process.stdout.write(data);
+                //process.stdout.write(data);
             });
             client.write(JSON.stringify({
                 name: 'whaler_rsync',
