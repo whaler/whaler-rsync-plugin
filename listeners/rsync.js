@@ -40,7 +40,7 @@ function exports(whaler) {
 
         if (followPull) {
             console.info('');
-            console.info('[%s] Rsync %s -> %s', process.pid, parsePath(options['src']), parsePath(options['dst']));
+            console.info('[%s] Rsync %s -> %s', process.pid, options['src'], options['dst']);
         }
 
         try {
@@ -256,20 +256,6 @@ function parseArgs(value) {
             appName: appName,
             serviceName: serviceName
         };
-    }
-
-    return parsePath(value);
-}
-
-/**
- * @param value
- * @returns {*}
- */
-function parsePath(value) {
-    if (value.indexOf('@') === -1) {
-        if (!path.isAbsolute(value)) {
-            value = path.join(process.cwd(), path.normalize(value));
-        }
     }
 
     return value;

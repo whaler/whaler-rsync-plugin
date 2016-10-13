@@ -15,6 +15,8 @@ function exports(whaler) {
             volume: 'Volume'
         })
         .action(function* (ref, volume, options) {
+            ref = this.util.prepare('ref', ref);
+
             let data;
             try {
                 data = yield whaler.$emit('rsync:daemon', {
