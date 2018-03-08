@@ -5,16 +5,16 @@ module.exports = exports;
 /**
  * @param whaler
  */
-function exports(whaler) {
+async function exports (whaler) {
 
-    whaler.on('rsync:kill', function* (options) {
-        if (0 !== options['container'].indexOf('whaler_rsync-daemon-')) {
+    whaler.on('rsync:kill', async ctx => {
+        if (0 !== ctx.options['container'].indexOf('whaler_rsync-daemon-')) {
             throw new Error('Error');
         }
 
-        const docker = whaler.get('docker');
-        const container = docker.getContainer(options['container']);
-        yield container.remove.$call(container, {
+        const { default: docker } = await whaler.fetch('docker');
+        const container = docker.getContainer(ctx.options['container']);
+        await container.remove({
             v: true,
             force: true
         });

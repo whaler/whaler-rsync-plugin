@@ -1,22 +1,21 @@
 'use strict';
 
-module.exports = exports;
+module.exports = cmd;
 
 /**
  * @param whaler
  */
-function exports(whaler) {
+async function cmd (whaler) {
 
-    whaler.get('cli')
+    (await whaler.fetch('cli')).default
+
         .command('rsync:kill <container>')
         //.alias('rsync-kill')
         .description('Kill rsync daemon', {
             container: 'Rsync container name'
         })
-        .action(function* (container, options) {
-            yield whaler.$emit('rsync:kill', {
-                container: container
-            });
+        .action(async (container, options) => {
+            await whaler.emit('rsync:kill', { container });
         })._noHelp = true;
 
 }

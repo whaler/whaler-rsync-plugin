@@ -1,22 +1,25 @@
 'use strict';
 
-var fs = require('fs');
-var tls = require('tls');
-var path = require('path');
-var console = require('x-console');
+const fs = require('fs');
+const tls = require('tls');
+const path = require('path');
+const util = require('util');
+const fsLstat = util.promisify(fs.lstat);
+const fsExists = util.promisify(fs.exists);
+const rsyncContainer = require('../lib/container');
 
 module.exports = exports;
 
 /**
  * @param whaler
  */
-function exports(whaler) {
+async function exports (whaler) {
 
-    whaler.on('rsync', function* (options) {
-        const src = parseArgs(options['src']);
-        const dst = parseArgs(options['dst']);
+    whaler.on('rsync', async ctx => {
+        const src = parseArgs(ctx.options['src']);
+        const dst = parseArgs(ctx.options['dst']);
 
-        const docker = whaler.get('docker');
+        const { default: docker } = await whaler.fetch('docker');
 
         const stage = {
             container: null,
@@ -25,53 +28,48 @@ function exports(whaler) {
 
         let err = null;
 
-        whaler.before('SIGINT', function* () {
-            yield exit.$call(whaler, options, stage);
+        whaler.before('SIGINT', async ctx => {
+            await exit(ctx.options, stage);
         });
 
         if ('local' === rsyncType(src) && 'local' === rsyncType(dst)) {
             throw new Error('not supported');
         }
 
-        const followPull = options['followPull'] || false;
-        const rsyncContainer = require('../lib/container');
-
-        yield rsyncContainer.pullImage.$call(docker, followPull);
+        const followPull = ctx.options['followPull'] || false;
+        await rsyncContainer.pullImage(docker, followPull);
 
         if (followPull) {
-            console.info('');
-            console.info('[%s] Rsync %s -> %s', process.pid, options['src'], options['dst']);
+            whaler.info('Rsync %s -> %s', ctx.options['src'], ctx.options['dst']);
         }
 
         try {
             if ('remote' === rsyncType(src) && 'remote' === rsyncType(dst)) {
-                stage.container = yield rsyncContainer.$call(docker, {
+                stage.container = await rsyncContainer(docker, {
                     ref: 'rsync-' + Math.floor(new Date().getTime() / 1000)
                 });
-                const info = yield stage.container.inspect.$call(stage.container);
+                const info = await stage.container.inspect();
 
                 const mounts = info['Mounts'];
                 for (let mount of mounts) {
                     if ('/volume' == mount['Destination']) {
 
-                        console.warn('');
-                        console.warn('[%s] Rsync %s -> %s', process.pid, options['src'], 'tmp@local');
+                        whaler.warn('Rsync %s -> %s', ctx.options['src'], 'tmp@local');
 
-                        yield whaler.$emit('rsync', {
-                            src: options['src'],
+                        await whaler.emit('rsync', {
+                            src: ctx.options['src'],
                             dst: mount['Source'],
-                            delete: options.delete || false,
-                            dryRun: options.dryRun || false
+                            delete: ctx.options['delete'] || false,
+                            dryRun: ctx.options['dryRun'] || false
                         });
 
-                        console.warn('');
-                        console.warn('[%s] Rsync %s -> %s', process.pid, 'tmp@local', options['dst']);
+                        whaler.warn('Rsync %s -> %s', 'tmp@local', ctx.options['dst']);
 
-                        yield whaler.$emit('rsync', {
+                        await whaler.emit('rsync', {
                             src: mount['Source'],
-                            dst: options['dst'],
-                            delete: options.delete || false,
-                            dryRun: options.dryRun || false
+                            dst: ctx.options['dst'],
+                            delete: ctx.options['delete'] || false,
+                            dryRun: ctx.options['dryRun'] || false
                         });
                     }
                 }
@@ -79,14 +77,14 @@ function exports(whaler) {
             } else {
 
                 if ('local' === rsyncType(src) && 'remote' === rsyncType(dst)) {
-                    const dstConf = stage.remote['dst'] = yield runDaemon.$call(whaler, options['dst'], dst);
+                    const dstConf = stage.remote['dst'] = await runDaemon(ctx.options['dst'], dst);
 
-                    let cmd = makeCmd(options);
-                    if (fs.existsSync(src + '/.rsyncignore')) {
+                    let cmd = makeCmd(ctx.options);
+                    if (await fsExists(src + '/.rsyncignore')) {
                         cmd.push('--exclude-from=/volume/.rsyncignore'); // rsync ignore
                     }
 
-                    const stat = yield fs.lstat.$call(null, src);
+                    const stat = await fsLstat(src);
                     if (stat.isDirectory()) {
                         cmd.push('/volume/');
                     } else {
@@ -96,7 +94,7 @@ function exports(whaler) {
                     cmd.push(generateRsync(dstConf));
 
                     console.log('');
-                    stage.container = yield rsyncContainer.$call(docker, {
+                    stage.container = await rsyncContainer(docker, {
                         src: stat.isDirectory() ? src : path.dirname(src),
                         cmd: cmd,
                         env: [
@@ -105,9 +103,9 @@ function exports(whaler) {
                     });
 
                 } else {
-                    const srcConf = stage.remote['src'] = yield runDaemon.$call(whaler, options['src'], src);
+                    const srcConf = stage.remote['src'] = await runDaemon(ctx.options['src'], src);
 
-                    let cmd = makeCmd(options);
+                    let cmd = makeCmd(ctx.options);
                     if (srcConf.exclude) {
                         cmd = cmd.concat(srcConf.exclude); // rsync ignore
                     }
@@ -121,7 +119,7 @@ function exports(whaler) {
                     }
 
                     console.log('');
-                    stage.container = yield rsyncContainer.$call(docker, {
+                    stage.container = await rsyncContainer(docker, {
                         src: dst,
                         cmd: cmd,
                         env: [
@@ -130,64 +128,176 @@ function exports(whaler) {
                     });
                 }
 
-                yield stage.container.start.$call(stage.container, {});
-                const stream = yield stage.container.logs.$call(stage.container, {
+                await stage.container.start({});
+                const stream = await stage.container.logs({
                     follow: true,
                     stdout: true,
                     stderr: true
                 });
 
-                yield writeLogs.$call(null, stream);
+                await writeLogs(stream);
             }
 
         } catch (e) {
             err = e;
         }
 
-        yield exit.$call(whaler, options, stage);
+        await exit(ctx.options, stage);
 
         if (err) {
             throw err;
         }
     });
+
+    // PRIVATE
+
+    /**
+     * @param options
+     * @param stage
+     */
+    const exit = async (options, stage) => {
+        if (stage.container) {
+            const container = stage.container;
+            stage.container = null;
+
+            try {
+                await container.remove({
+                    force: true,
+                    v: true
+                });
+            } catch (e) {}
+        }
+
+        for (let key of Object.keys(stage.remote)) {
+            const config = stage.remote[key];
+            delete stage.remote[key];
+
+            try {
+                whaler.warn('Killing "%s" rsync daemon', options[key]);
+                if (config.remote) {
+                    await killRemoteDaemon(config);
+                } else {
+                    await whaler.emit('rsync:kill', { container: config.container });
+                }
+            } catch (e) {}
+        }
+    };
+
+    /**
+     * @param name
+     * @param config
+     */
+    const runDaemon = async (name, config) => {
+        whaler.warn('Running "%s" rsync daemon', name);
+
+        if (isLocal(config.host)) {
+            const response = await whaler.emit('rsync:daemon', {
+                ref: config.ref,
+                volume: config.volume
+            });
+            response['host'] = process.env.WHALER_DOCKER_IP || '172.17.0.1';
+
+            return response;
+        }
+
+        return await runRemoteDaemon(config);
+    };
 }
 
 // PRIVATE
 
 /**
- * @param options
- * @param stage
+ * @param config
  */
-function* exit(options, stage) {
-    const whaler = this;
+const killRemoteDaemon = util.promisify((config, callback) => {
+    const client = createClient(config.remote);
 
-    if (stage.container) {
-        const container = stage.container;
-        stage.container = null;
+    client.on('error', err => {
+        callback(err);
+    });
 
-        try {
-            yield container.remove.$call(container, {
-                force: true,
-                v: true
-            });
-        } catch (e) {}
-    }
+    client.on('connect', () => {
+        client.on('data', data => {
+            //process.stdout.write(data);
+        });
+        client.write(JSON.stringify({
+            name: 'whaler_rsync',
+            argv: [
+                'rsync:kill',
+                config.container
+            ]
+        }));
+    });
 
-    for (let key of Object.keys(stage.remote)) {
-        const config = stage.remote[key];
-        delete stage.remote[key];
+    client.on('end', () => {
+        callback(null);
+    });
+});
 
-        try {
-            yield killDaemon.$call(whaler, options[key], config);
-        } catch (e) {}
-    }
-}
+/**
+ * @param config
+ */
+const runRemoteDaemon = util.promisify((config, callback) => {
+    const client = createClient(config.host);
+
+    client.on('error', err => {
+        callback(err);
+    });
+
+    let response = null;
+    client.on('connect', () => {
+        client.on('data', data => {
+            try {
+                const json = JSON.parse(data.toString());
+                response = json;
+            } catch (e) {
+                //process.stdout.write(data);
+            }
+        });
+        client.write(JSON.stringify({
+            name: 'whaler_rsync',
+            argv: [
+                'rsync:daemon',
+                config.ref,
+                config.volume || ''
+            ]
+        }));
+    });
+
+    client.on('end', () => {
+        if (!response) {
+            return callback(new Error('Error'));
+        }
+
+        if ('error' == response['type']) {
+            return callback(new Error(response['msg']));
+        }
+
+        response['host'] = client.__host;
+        response['remote'] = config.host;
+
+        callback(null, response);
+    });
+});
+
+/**
+ * @param stream
+ */
+const writeLogs = util.promisify((stream, callback) => {
+    stream.setEncoding('utf8');
+    stream.on('data', data => {
+        process.stdout.write(data);
+    });
+    stream.on('end', () => {
+        callback(null);
+    });
+});
 
 /**
  * @param options
  * @returns {string[]}
  */
-function makeCmd(options) {
+function makeCmd (options) {
     const cmd = ['rsync'];
 
     cmd.push('-az');              // https://download.samba.org/pub/rsync/rsync.html
@@ -210,7 +320,7 @@ function makeCmd(options) {
  * @param config
  * @returns {string}
  */
-function generateRsync(config) {
+function generateRsync (config) {
     return 'rsync://'+ config.username + '@' + config.host + ':' + config.port + '/data';
 }
 
@@ -218,7 +328,7 @@ function generateRsync(config) {
  * @param value
  * @returns {*}
  */
-function parseArgs(value) {
+function parseArgs (value) {
     if (value.indexOf('@') > -1) {
         const values = value.split('@');
 
@@ -265,28 +375,26 @@ function parseArgs(value) {
  * @param value
  * @returns {string}
  */
-function rsyncType(value) {
+function rsyncType (value) {
     return 'string' === typeof value ? 'local' : 'remote';
 }
 
 /**
- * @param stream
- * @param callback
+ * @param host
+ * @returns {boolean}
  */
-function writeLogs(stream, callback) {
-    stream.setEncoding('utf8');
-    stream.on('data', function(data) {
-        process.stdout.write(data);
-    });
-    stream.on('end', function() {
-        callback(null);
-    });
+function isLocal (host) {
+    const parts = host.split(':');
+    if (parts.length > 1) {
+        host = parts[0];
+    }
+    return ['127.0.0.1', 'localhost', 'whaler'].includes(host);
 }
 
 /**
  * @param host
  */
-function createClient(host) {
+function createClient (host) {
     let port = 1337;
 
     const parts = host.split(':');
@@ -295,14 +403,6 @@ function createClient(host) {
         port = parts[1];
     }
 
-    const lh = ['127.0.0.1', 'localhost', 'whaler'];
-
-    // local
-    if (-1 !== lh.indexOf(host)) {
-        return;
-    }
-
-    // remote
     let key, cert;
     try {
         key = fs.readFileSync(process.env.HOME + '/.whaler/ssl/' + host + '.key');
@@ -319,114 +419,4 @@ function createClient(host) {
     client.__host = host;
 
     return client;
-}
-
-/**
- * @param name
- * @param config
- * @param callback
- */
-function runDaemon(name, config, callback) {
-    console.warn('');
-    console.warn('[%s] Running "%s" rsync daemon', process.pid, name);
-
-    const whaler = this;
-    const client = createClient(config.host);
-
-    if (!client) {
-        whaler.emit('rsync:daemon', {
-            ref: config.ref,
-            volume: config.volume
-        }, (err, response) => {
-            if (err) {
-                return callback(err);
-            }
-            response['host'] = process.env.WHALER_DOCKER_IP || '172.17.0.1';
-            callback(null, response);
-        });
-
-        return;
-    }
-
-    client.on('error', (err) => {
-        callback(err);
-    });
-
-    let response = null;
-    client.on('connect', () => {
-        client.on('data', (data) => {
-            try {
-                const json = JSON.parse(data.toString());
-                response = json;
-            } catch (e) {
-                //process.stdout.write(data);
-            }
-        });
-        client.write(JSON.stringify({
-            name: 'whaler_rsync',
-            argv: [
-                'rsync:daemon',
-                config.ref,
-                config.volume || ''
-            ]
-        }));
-    });
-
-    client.on('end', () => {
-        if (!response) {
-            return callback(new Error('Error'));
-        }
-
-        if ('error' == response['type']) {
-            return callback(new Error(response['msg']));
-        }
-
-        response['host'] = client.__host;
-        response['remote'] = config.host;
-
-        callback(null, response);
-    });
-}
-
-/**
- * @param name
- * @param config
- * @param callback
- */
-function killDaemon(name, config, callback) {
-    const whaler = this;
-
-    console.warn('');
-    console.warn('[%s] Killing "%s" rsync daemon', process.pid, name);
-
-    if (config.remote) {
-        const client = createClient(config.remote);
-
-        client.on('error', (err) => {
-            callback(err);
-        });
-
-        client.on('connect', () => {
-            client.on('data', (data) => {
-                //process.stdout.write(data);
-            });
-            client.write(JSON.stringify({
-                name: 'whaler_rsync',
-                argv: [
-                    'rsync:kill',
-                    config.container
-                ]
-            }));
-        });
-
-        client.on('end', () => {
-            callback(null);
-        });
-
-        return;
-    }
-
-    whaler.emit('rsync:kill', {
-        container: config.container
-    }, callback);
 }

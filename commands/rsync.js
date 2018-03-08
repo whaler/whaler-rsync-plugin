@@ -1,15 +1,14 @@
 'use strict';
 
-var console = require('x-console');
-
-module.exports = exports;
+module.exports = cmd;
 
 /**
  * @param whaler
  */
-function exports(whaler) {
+async function cmd (whaler) {
 
-    whaler.get('cli')
+    (await whaler.fetch('cli')).default
+
         .command('rsync <source> <destination>')
         //.alias('sync')
         .description('Synchronize application volumes', {
@@ -18,10 +17,10 @@ function exports(whaler) {
         })
         .option('--dry-run', 'Perform a trial run with no changes made')
         .option('--delete', 'Delete extraneous files from destination dirs')
-        .action(function* (source, destination, options) {
-            yield whaler.$emit('rsync', {
-                src: preparePath(this, source),
-                dst: preparePath(this, destination),
+        .action(async (source, destination, options, util) => {
+            await whaler.emit('rsync', {
+                src: preparePath(util, source),
+                dst: preparePath(util, destination),
                 delete: options.delete || false,
                 dryRun: options.dryRun || false,
                 followPull: true
@@ -31,17 +30,15 @@ function exports(whaler) {
 }
 
 /**
- * @param cmd
+ * @param util
  * @param value
- * @returns {*}
+ * @returns {String}
  */
-function preparePath(cmd, value) {
+function preparePath (util, value) {
     if (value.indexOf('@') > -1) {
         const values = value.split('@');
-        values[0] = cmd.util.prepare('ref', values[0]);
-
+        values[0] = util.prepare('ref', values[0]);
         return values.join('@');
     }
-
-    return cmd.util.prepare('path', value);
+    return util.prepare('path', value);
 }

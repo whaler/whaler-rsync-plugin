@@ -1,28 +1,26 @@
 'use strict';
 
-module.exports = exports;
+module.exports = cmd;
 
 /**
  * @param whaler
  */
-function exports(whaler) {
+async function cmd (whaler) {
 
-    whaler.get('cli')
+    (await whaler.fetch('cli')).default
+
         .command('rsync:daemon <ref> [volume]')
         //.alias('rsync-daemon')
         .description('Rsync daemon', {
             ref: 'Application or container name',
             volume: 'Volume'
         })
-        .action(function* (ref, volume, options) {
-            ref = this.util.prepare('ref', ref);
+        .action(async (ref, volume, options, util) => {
+            ref = util.prepare('ref', ref);
 
             let data;
             try {
-                data = yield whaler.$emit('rsync:daemon', {
-                    ref: ref,
-                    volume: volume
-                });
+                data = await whaler.emit('rsync:daemon', { ref, volume });
             } catch (e) {
                 data = {
                     type: 'error',

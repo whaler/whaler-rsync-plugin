@@ -13,12 +13,10 @@
     "plugin"
   ],
   "license": "MIT",
-  "version": "0.2.6",
+  "version": "0.3.0",
   "main": "index.js",
   "whaler-plugin": true,
-  "dependencies": {
-    "x-console": "^0.1.2"
-  },
+  "dependencies": {},
   "repository": {
     "type": "git",
     "url": "git@github.com:whaler/whaler-rsync-plugin.git"

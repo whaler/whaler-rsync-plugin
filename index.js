@@ -6,21 +6,21 @@ module.exports.__cmd = cmd;
 /**
  * @param whaler
  */
-function exports(whaler) {
+async function exports (whaler) {
 
-    require('./listeners/rsync')(whaler);
-    require('./listeners/daemon')(whaler);
-    require('./listeners/kill')(whaler);
+    await require('./listeners/rsync')(whaler);
+    await require('./listeners/daemon')(whaler);
+    await require('./listeners/kill')(whaler);
 
 }
 
 /**
  * @param whaler
  */
-function cmd(whaler) {
+async function cmd (whaler) {
 
-    require('./commands/rsync')(whaler);
-    require('./commands/daemon')(whaler);
-    require('./commands/kill')(whaler);
+    await require('./commands/rsync')(whaler);
+    await require('./commands/daemon')(whaler);
+    await require('./commands/kill')(whaler);
 
 }
