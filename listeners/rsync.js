@@ -28,7 +28,7 @@ async function exports (whaler) {
 
         let err = null;
 
-        whaler.before('SIGINT', async ctx => {
+        whaler.before('kill', async ctx => {
             await exit(ctx.options, stage);
         });
 
