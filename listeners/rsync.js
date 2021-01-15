@@ -173,7 +173,7 @@ async function exports (whaler) {
             delete stage.remote[key];
 
             try {
-                whaler.warn('Killing "%s" rsync daemon', options[key]);
+                whaler.warn('Killing `%s` rsync daemon', options[key]);
                 if (config.remote) {
                     await killRemoteDaemon(config);
                 } else {
@@ -188,7 +188,7 @@ async function exports (whaler) {
      * @param config
      */
     const runDaemon = async (name, config) => {
-        whaler.warn('Running "%s" rsync daemon', name);
+        whaler.warn('Running `%s` rsync daemon', name);
 
         if (isLocal(config.host)) {
             const response = await whaler.emit('rsync:daemon', {

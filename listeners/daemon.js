@@ -53,7 +53,7 @@ module.exports = async function exports (whaler) {
             }
 
             if (null === destination) {
-                throw new Error('Volume "' + volume + '" rejected!');
+                throw new Error('Volume `' + volume + '` rejected!');
             }
 
         } else if (ctx.options['volume']) {
